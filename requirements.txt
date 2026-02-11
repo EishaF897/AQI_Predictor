@@ -8,12 +8,12 @@ python-dateutil>=2.8
 scikit-learn>=1.2
 joblib>=1.2
 
-# Deep Learning (Pinned)
+# Deep Learning
 tensorflow==2.15.0
 protobuf==4.25.4
 
-# Feature Store
-hopsworks[python]==4.6.0
+# Feature Store (MATCH BACKEND VERSION)
+hopsworks[python]==4.2.*
 confluent-kafka>=2.3.0
 
 # App
