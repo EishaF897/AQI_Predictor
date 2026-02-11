@@ -1,0 +1,68 @@
+name: CI CD Pipeline
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  aqi-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+
+    # -----------------------------
+    # STEP 1: Run Feature Pipeline (Always)
+    # -----------------------------
+    - name: Run Feature Pipeline
+      env:
+        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+      run: |
+        python Pipelines/feature_pipeline.py
+
+    # -----------------------------
+    # STEP 2: Check If Midnight UTC
+    # -----------------------------
+    - name: Check Time
+      id: timecheck
+      run: |
+        HOUR=$(date -u +"%H")
+        echo "Current UTC Hour: $HOUR"
+        if [ "$HOUR" = "00" ]; then
+          echo "run_daily=true" >> $GITHUB_OUTPUT
+        else
+          echo "run_daily=false" >> $GITHUB_OUTPUT
+        fi
+
+    # -----------------------------
+    # STEP 3: Run Training (Only at Midnight)
+    # -----------------------------
+    - name: Run Training Pipeline
+      if: steps.timecheck.outputs.run_daily == 'true'
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+      run: |
+        python Pipelines/training_pipeline.py
+
+    # -----------------------------
+    # STEP 4: Run Inference (Only at Midnight)
+    # -----------------------------
+    - name: Run Inference Pipeline
+      if: steps.timecheck.outputs.run_daily == 'true'
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+      run: |
+        python Pipelines/inference_pipeline.py

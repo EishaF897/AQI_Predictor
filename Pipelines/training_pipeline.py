@@ -1,5 +1,5 @@
 # =========================================
-# AQI TRAINING PIPELINE
+# AQI TRAINING PIPELINE (FINAL VERSION)
 # =========================================
 
 import os
@@ -34,9 +34,10 @@ def evaluate(y_true, y_pred):
 
 
 # -----------------------------------------
-# LOAD DATA FROM FEATURE STORE
+# LOAD DATA
 # -----------------------------------------
 def load_data():
+
     project = hopsworks.login()
     fs = project.get_feature_store()
 
@@ -47,6 +48,9 @@ def load_data():
 
     df = fg.read()
     df = df.sort_values("timestamp").reset_index(drop=True)
+
+    if len(df) < 50:
+        raise ValueError("Not enough data for training.")
 
     TARGET = "aqi"
 
@@ -62,7 +66,7 @@ def load_data():
 
 
 # -----------------------------------------
-# TRAINING PIPELINE
+# TRAIN FUNCTION
 # -----------------------------------------
 def train():
 
@@ -73,6 +77,11 @@ def train():
         test_size=0.2,
         shuffle=False
     )
+
+    os.makedirs("models", exist_ok=True)
+
+    # Save feature list (important for inference)
+    joblib.dump(FEATURES, "models/features.pkl")
 
     # ======================
     # 1️⃣ RIDGE REGRESSION
@@ -141,45 +150,50 @@ def train():
     print(results)
 
     # -----------------------------------------
-    # MODEL SELECTION
+    # MODEL SELECTION (Lowest RMSE Wins)
     # -----------------------------------------
-
     all_models = {
-    "ridge": (ridge_pipeline, ridge_metrics),
-    "random_forest": (rf_model, rf_metrics),
-    "neural_net": (nn_model, nn_metrics)
+        "ridge": (ridge_pipeline, ridge_metrics),
+        "random_forest": (rf_model, rf_metrics),
+        "neural_net": (nn_model, nn_metrics)
     }
 
-    # Select model with lowest RMSE
     best_model_name = min(all_models, key=lambda x: all_models[x][1]["rmse"])
     best_model, best_metrics = all_models[best_model_name]
 
     print(f"\nBest Model Selected: {best_model_name}")
     print(best_metrics)
 
-
     # -----------------------------------------
     # REGISTER BEST MODEL
     # -----------------------------------------
     mr = project.get_model_registry()
-    os.makedirs("models", exist_ok=True)
 
-    # Save model
     if best_model_name == "neural_net":
+
+        # Save NN + scaler
         best_model.save("models/best_model")
+        joblib.dump(scaler, "models/nn_scaler.pkl")
+
         model_registry = mr.tensorflow.create_model(
             name="aqi_best_model",
             metrics=best_metrics
         )
+
         model_registry.save("models/best_model")
 
     else:
+
         joblib.dump(best_model, "models/best_model.pkl")
+
         model_registry = mr.python.create_model(
             name="aqi_best_model",
             metrics=best_metrics
         )
+
         model_registry.save("models")
+
+    print("\nTraining & Registration Completed Successfully ✅")
 
 
 # -----------------------------------------

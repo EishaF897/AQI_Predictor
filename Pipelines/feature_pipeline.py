@@ -8,12 +8,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 import time
 import hopsworks
+import os
 
 
 # -------- CONSTANTS --------
 LAT = 33.6844   # Islamabad Latitude
 LON = 73.0479   # Islamabad Longitude
-API_KEY = "YOUR_API_KEY_HERE"   # 🔒 Replace with your API key
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 
 # -------- FETCH HISTORICAL AIR POLLUTION DATA --------
@@ -38,7 +39,7 @@ def fetch_air_pollution_history(lat, lon, api_key, start_date, end_date):
 
         for item in data.get("list", []):
             rows.append({
-                "timestamp": pd.to_datetime(item["dt"], unit="s"),
+                "timestamp": pd.to_datetime(item["dt"], unit="s", utc=True),
                 "pm25": item["components"]["pm2_5"],
                 "pm10": item["components"]["pm10"],
                 "co": item["components"]["co"],
@@ -57,6 +58,10 @@ def fetch_air_pollution_history(lat, lon, api_key, start_date, end_date):
 
 # -------- FEATURE ENGINEERING --------
 def compute_features(df):
+
+    # Ensure timestamp is datetime and UTC-aware
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+
     df = df.sort_values("timestamp").reset_index(drop=True)
 
     # ---- Time-based features ----
@@ -82,17 +87,19 @@ def compute_features(df):
 # -------- MAIN PIPELINE --------
 def run_pipeline():
 
-    # Login to Hopsworks
     project = hopsworks.login()
     fs = project.get_feature_store()
 
-    # Get feature group
     aqi_fg = fs.get_feature_group(
         name="aqi_features",
         version=1
     )
 
-    # Fetch last 1 hour data
+    # 1️⃣ Read last 6 rows from feature store
+    history_df = aqi_fg.read()
+    history_df = history_df.sort_values("timestamp").tail(6)
+
+    # 2️⃣ Fetch last 1 hour raw data
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(hours=1)
 
@@ -108,13 +115,26 @@ def run_pipeline():
         print("No raw data fetched.")
         return
 
-    df_features = compute_features(df_raw)
+    # 3️⃣ Merge history + new data
+    combined = pd.concat([history_df, df_raw], ignore_index=True)
 
-    if df_features.empty:
+    # Keep only necessary columns for recompute
+    combined = combined[[
+        "timestamp","pm25","pm10","co","no2","o3","so2","nh3","aqi"
+    ]]
+
+    # 4️⃣ Recompute features
+    combined_features = compute_features(combined)
+
+    # 5️⃣ Keep only newest row
+    latest_row = combined_features.tail(1)
+
+    if latest_row.empty:
         print("No new features to insert.")
-    else:
-        aqi_fg.insert(df_features)
-        print(f"Inserted {len(df_features)} new rows into Feature Group.")
+        return
+
+    aqi_fg.insert(latest_row)
+    print("Inserted 1 new row into Feature Group.")
 
 
 # -------- ENTRY POINT --------
