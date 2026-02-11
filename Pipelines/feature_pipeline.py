@@ -69,7 +69,7 @@ def compute_features(df):
     df["day"] = df["timestamp"].dt.day
     df["month"] = df["timestamp"].dt.month
     df["day_of_week"] = df["timestamp"].dt.dayofweek
-    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
+    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype("int32")
 
     # ---- Lag & trend features ----
     df["aqi_lag_1"] = df["aqi"].shift(1)
