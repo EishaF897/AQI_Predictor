@@ -1,9 +1,14 @@
-name: CI CD Pipeline
+name: AQI CI CD Pipeline
 
 on:
+  push:
+    branches:
+      - main
+
   schedule:
-    # Run every hour
-    - cron: '0 * * * *'
+    # Every hour at minute 5 (safer than minute 0)
+    - cron: '5 * * * *'
+
   workflow_dispatch:
 
 jobs:
@@ -21,11 +26,12 @@ jobs:
 
     - name: Install Dependencies
       run: |
+        pip install --upgrade pip
         pip install -r requirements.txt
 
-    # -----------------------------
-    # STEP 1: Run Feature Pipeline (Always)
-    # -----------------------------
+    # --------------------------------
+    # STEP 1: Feature Pipeline (Hourly)
+    # --------------------------------
     - name: Run Feature Pipeline
       env:
         OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -33,23 +39,23 @@ jobs:
       run: |
         python Pipelines/feature_pipeline.py
 
-    # -----------------------------
+    # --------------------------------
     # STEP 2: Check If Midnight UTC
-    # -----------------------------
+    # --------------------------------
     - name: Check Time
       id: timecheck
       run: |
         HOUR=$(date -u +"%H")
-        echo "Current UTC Hour: $HOUR"
+        echo "UTC Hour: $HOUR"
         if [ "$HOUR" = "00" ]; then
           echo "run_daily=true" >> $GITHUB_OUTPUT
         else
           echo "run_daily=false" >> $GITHUB_OUTPUT
         fi
 
-    # -----------------------------
-    # STEP 3: Run Training (Only at Midnight)
-    # -----------------------------
+    # --------------------------------
+    # STEP 3: Training (Daily)
+    # --------------------------------
     - name: Run Training Pipeline
       if: steps.timecheck.outputs.run_daily == 'true'
       env:
@@ -57,11 +63,10 @@ jobs:
       run: |
         python Pipelines/training_pipeline.py
 
-    # -----------------------------
-    # STEP 4: Run Inference (Only at Midnight)
-    # -----------------------------
+    # --------------------------------
+    # STEP 4: Inference (Hourly)
+    # --------------------------------
     - name: Run Inference Pipeline
-      if: steps.timecheck.outputs.run_daily == 'true'
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |

@@ -19,6 +19,7 @@ hopsworks>=3.4
 
 # Visualization / App
 streamlit>=1.28
+plotly
 
 # Optional (useful in CI/CD)
 pyyaml>=6.0
