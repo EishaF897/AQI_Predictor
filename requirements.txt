@@ -15,7 +15,8 @@ joblib>=1.2
 tensorflow>=2.12
 
 # Feature Store & MLOps
-hopsworks==4.2.*
+hopsworks[python]
+confluent-kafka
 
 # Visualization / App
 streamlit>=1.28

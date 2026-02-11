@@ -1,9 +1,6 @@
 name: AQI CI CD Pipeline
 
 on:
-  push:
-    branches:
-      - main
 
   schedule:
     # Every hour at minute 5 (safer than minute 0)
