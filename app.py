@@ -1,160 +1,99 @@
-# =========================================
-# AQI FORECAST DASHBOARD
-# =========================================
-
 import streamlit as st
+import requests
 import pandas as pd
 import plotly.express as px
-import joblib
-import tensorflow as tf
-import hopsworks
-from datetime import timedelta
 
+st.set_page_config(layout="wide")
 
-MODEL_NAME = "aqi_best_model"
-HOURS_TO_FORECAST = 72
+st.title("🌍 Real-Time 3 Day AQI Dashboard")
 
+API_URL = "http://127.0.0.1:8000/predict"
 
-# -----------------------------------------
-# LOAD DATA + MODEL
-# -----------------------------------------
-@st.cache_resource
-def load_artifacts():
+# ---------------- LOADER ---------------- #
+with st.spinner("Fetching AQI Forecast..."):
+    response = requests.get(API_URL)
+    data = response.json()
 
-    project = hopsworks.login()
-    fs = project.get_feature_store()
-    mr = project.get_model_registry()
+df = pd.DataFrame(data["predictions"])
+df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-    fg = fs.get_feature_group(
-        name="aqi_features",
-        version=1
-    )
-
-    df = fg.read()
-    df = df.sort_values("timestamp").reset_index(drop=True)
-
-    model = mr.get_model(MODEL_NAME, version=1)
-    model_dir = model.download()
-
-    FEATURES = joblib.load(f"{model_dir}/features.pkl")
-
-    try:
-        model_obj = joblib.load(f"{model_dir}/best_model.pkl")
-        model_type = "sklearn"
-        scaler = None
-    except:
-        model_obj = tf.keras.models.load_model(f"{model_dir}/best_model")
-        model_type = "tensorflow"
-        scaler = joblib.load(f"{model_dir}/nn_scaler.pkl")
-
-    return df, model_obj, model_type, scaler, FEATURES
-
-
-# -----------------------------------------
-# FORECAST FUNCTION
-# -----------------------------------------
-def forecast(df, model, model_type, scaler, FEATURES):
-
-    latest_row = df.iloc[-1:].copy()
-    predictions = []
-
-    for _ in range(HOURS_TO_FORECAST):
-
-        X_input = latest_row[FEATURES]
-
-        if model_type == "sklearn":
-            pred = model.predict(X_input)[0]
-        else:
-            X_scaled = scaler.transform(X_input)
-            pred = model.predict(X_scaled).flatten()[0]
-
-        predictions.append(pred)
-
-        # Update row for next hour
-        next_row = latest_row.copy()
-        next_row["timestamp"] += timedelta(hours=1)
-        next_row["aqi_lag_1"] = pred
-        next_row["aqi"] = pred
-
-        latest_row = next_row
-
-    forecast_df = pd.DataFrame({
-        "datetime": pd.date_range(
-            start=df["timestamp"].iloc[-1] + timedelta(hours=1),
-            periods=HOURS_TO_FORECAST,
-            freq="H"
-        ),
-        "predicted_aqi": predictions
-    })
-
-    return forecast_df
-
-
-# -----------------------------------------
-# STREAMLIT UI
-# -----------------------------------------
-
-st.set_page_config(page_title="AQI 3-Day Forecast", layout="wide")
-
-st.title("🌫️ AQI 3-Day Forecast Dashboard")
-st.markdown("Real-time AQI forecasting using automated ML pipeline")
-
-with st.spinner("Loading model and computing forecast..."):
-
-    df, model, model_type, scaler, FEATURES = load_artifacts()
-    forecast_df = forecast(df, model, model_type, scaler, FEATURES)
-    # Convert datetime
-    forecast_df["datetime"] = pd.to_datetime(forecast_df["datetime"])
-
-    # Extract date + day
-    forecast_df["date"] = forecast_df["datetime"].dt.date
-    forecast_df["day_name"] = forecast_df["datetime"].dt.day_name()
-
-    # Aggregate per day
-    daily_summary = forecast_df.groupby(["date", "day_name"]).agg(
-    min_aqi=("predicted_aqi", "min"),
-    max_aqi=("predicted_aqi", "max"),
-    avg_aqi=("predicted_aqi", "mean")
-    ).reset_index()
-
-
-st.success("Forecast Generated Successfully!")
-
-# -----------------------------------------
-# Display Metrics
-# -----------------------------------------
-
-st.subheader("📅 3-Day AQI Forecast Summary")
-
-for _, row in daily_summary.iterrows():
-    st.markdown(f"""
-    ### {row['day_name']} ({row['date']})
-    - 🔽 Minimum AQI: **{row['min_aqi']:.2f}**
-    - 🔼 Maximum AQI: **{row['max_aqi']:.2f}**
-    - 📊 Average AQI: **{row['avg_aqi']:.2f}**
-    """)
-
-
-# -----------------------------------------
-# Interactive Chart
-# -----------------------------------------
-
-st.subheader("📈 AQI Forecast Trend")
-
-fig = px.bar(
-    daily_summary,
-    x="day_name",
-    y="avg_aqi",
-    title="Average AQI for Next 3 Days"
+# ---------------- LINE CHART ---------------- #
+fig = px.area(
+    df,
+    x="timestamp",
+    y="predicted_aqi_class",
 )
 
+fig.update_traces(mode="lines")
+
+fig.update_layout(
+    title="3-Day AQI Forecast (Hourly)",
+    yaxis=dict(
+        tickmode="array",
+        tickvals=[1, 2, 3, 4, 5],
+        ticktext=["Good", "Moderate", "Unhealthy", "Very Unhealthy", "Hazardous"]
+    ),
+    showlegend=False
+)
 
 st.plotly_chart(fig, use_container_width=True)
 
+# ---------------- DAILY SUMMARY ---------------- #
 
-# -----------------------------------------
-# Raw Data
-# -----------------------------------------
+# Get daily average AQI class
+df["date"] = df["timestamp"].dt.date
+daily = (
+    df.groupby("date")["predicted_aqi_class"]
+    .mean()
+    .round()
+    .reset_index()
+    .head(3)
+)
 
-st.subheader("📄 Forecast Table")
-st.dataframe(forecast_df)
+
+aqi_labels = {
+    1: "Good",
+    2: "Moderate",
+    3: "Unhealthy",
+    4: "Very Unhealthy",
+    5: "Hazardous"
+}
+
+colors = {
+    1: "green",
+    2: "#FFD700",
+    3: "orange",
+    4: "red",
+    5: "purple"
+}
+
+st.markdown("## 📅 3-Day AQI Summary")
+
+for _, row in daily.iterrows():
+    aqi_value = int(row["predicted_aqi_class"])
+    label = aqi_labels[aqi_value]
+    color = colors[aqi_value]
+
+    st.markdown(
+        f"""
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            padding:18px;
+            border-left:8px solid {color};
+            background-color:#f9f9f9;
+            margin-bottom:8px;
+            border-radius:8px;
+        ">
+            <div style="font-size:18px;">
+                {row['date'].strftime('%A, %b %d')}
+            </div>
+            <div style="font-size:28px; font-weight:bold; color:{color};">
+                AQI {aqi_value} - {label}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+

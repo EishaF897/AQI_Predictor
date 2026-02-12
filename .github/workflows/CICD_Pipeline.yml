@@ -34,7 +34,8 @@ jobs:
         OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |
-        python Pipelines/feature_pipeline.py
+        set -e
+        python pipelines/feature_pipeline.py
 
     # --------------------------------
     # STEP 2: Check If Midnight UTC
@@ -58,13 +59,4 @@ jobs:
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |
-        python Pipelines/training_pipeline.py
-
-    # --------------------------------
-    # STEP 4: Inference (Hourly)
-    # --------------------------------
-    - name: Run Inference Pipeline
-      env:
-        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-      run: |
-        python Pipelines/inference_pipeline.py
+        python pipelines/training_pipeline.py

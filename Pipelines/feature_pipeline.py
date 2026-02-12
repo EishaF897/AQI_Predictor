@@ -98,11 +98,11 @@ def run_pipeline():
         version=1
     )
 
-    # 1️⃣ Read last 6 rows from feature store
+    #  Read last 6 rows from feature store
     history_df = aqi_fg.read()
     history_df = history_df.sort_values("timestamp").tail(6)
 
-    # 2️⃣ Fetch last 1 hour raw data
+    #  Fetch last 1 hour raw data
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(hours=1)
 
@@ -118,7 +118,7 @@ def run_pipeline():
         print("No raw data fetched.")
         return
 
-    # 3️⃣ Merge history + new data
+    #  Merge history + new data
     combined = pd.concat([history_df, df_raw], ignore_index=True)
 
     # Keep only necessary columns for recompute
@@ -126,10 +126,10 @@ def run_pipeline():
         "timestamp","pm25","pm10","co","no2","o3","so2","nh3","aqi"
     ]]
 
-    # 4️⃣ Recompute features
+    #  Recompute features
     combined_features = compute_features(combined)
 
-    # 5️⃣ Keep only newest row
+    #  Keep only newest row
     latest_row = combined_features.tail(1)
 
     if latest_row.empty:
