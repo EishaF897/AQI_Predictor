@@ -73,6 +73,9 @@ def compute_features(df):
 
     # ---- Lag & trend features ----
     df["aqi_lag_1"] = df["aqi"].shift(1)
+    df["aqi_lag_2"] = df["aqi"].shift(2)
+    df["aqi_lag_3"] = df["aqi"].shift(3)
+    df["aqi_roll_6h"] = df["aqi"].rolling(6).mean()
     df["aqi_change_rate"] = df["aqi"] - df["aqi_lag_1"]
 
     # ---- Rolling averages ----

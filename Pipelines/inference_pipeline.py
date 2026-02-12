@@ -1,94 +1,93 @@
 # =========================================
-# AQI 3-DAY FORECAST PIPELINE (FINAL)
+# AQI INFERENCE PIPELINE (AUTO BEST MODEL)
 # =========================================
 
 import joblib
-import pandas as pd
 import numpy as np
-from datetime import timedelta
+import pandas as pd
 import hopsworks
 import tensorflow as tf
 
 
-MODEL_NAME = "aqi_best_model"
-HOURS_TO_FORECAST = 72
+def load_best_model(project):
+
+    mr = project.get_model_registry()
+
+    model_names = [
+        "aqi_random_forest",
+        "aqi_logistic_regression",
+        "aqi_neural_network"
+    ]
+
+    best_f1 = -1
+    best_model = None
+    best_name = None
+
+    for name in model_names:
+        model = mr.get_model(name, version=None)   # latest version
+        metrics = model.training_metrics
+        f1 = metrics["f1_weighted"]
+
+        if f1 > best_f1:
+            best_f1 = f1
+            best_model = model
+            best_name = name
 
 
-def load_artifacts():
+    print("Best model selected:", best_name)
+
+    model_dir = best_model.download()
+
+    FEATURES = joblib.load(f"{model_dir}/features.pkl")
+
+    if "neural" in best_name:
+        model_obj = tf.keras.models.load_model(f"{model_dir}/nn_model")
+        scaler = joblib.load(f"{model_dir}/nn_scaler.pkl")
+        model_type = "nn"
+    elif "logistic" in best_name:
+        model_obj = joblib.load(f"{model_dir}/log_model.pkl")
+        scaler = joblib.load(f"{model_dir}/log_scaler.pkl")
+        model_type = "log"
+    else:
+        model_obj = joblib.load(f"{model_dir}/rf_model.pkl")
+        scaler = None
+        model_type = "rf"
+
+    return model_obj, scaler, model_type, FEATURES
+
+
+def run_inference():
 
     project = hopsworks.login()
     fs = project.get_feature_store()
-    mr = project.get_model_registry()
 
-    # Load feature group
     fg = fs.get_feature_group(
         name="aqi_features",
         version=1
     )
 
     df = fg.read()
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    df = df.sort_values("timestamp")
 
-    # Load best model
-    model = mr.get_model(MODEL_NAME, version=1)
-    model_dir = model.download()
+    latest_row = df.iloc[-1:]
+    model, scaler, model_type, FEATURES = load_best_model(project)
 
-    # Load features list
-    FEATURES = joblib.load(f"{model_dir}/features.pkl")
+    X = latest_row[FEATURES]
 
-    # Try loading sklearn model
-    try:
-        model_obj = joblib.load(f"{model_dir}/best_model.pkl")
-        model_type = "sklearn"
-        scaler = None
-    except:
-        model_obj = tf.keras.models.load_model(f"{model_dir}/best_model")
-        model_type = "tensorflow"
-        scaler = joblib.load(f"{model_dir}/nn_scaler.pkl")
+    if model_type == "rf":
+        prediction = model.predict(X)[0]
 
-    return df, model_obj, model_type, scaler, FEATURES
+    elif model_type == "log":
+        X_scaled = scaler.transform(X)
+        prediction = model.predict(X_scaled)[0]
 
+    else:
+        X_scaled = scaler.transform(X)
+        probs = model.predict(X_scaled)
+        prediction = np.argmax(probs, axis=1)[0] + 1
 
-def forecast():
-
-    df, model, model_type, scaler, FEATURES = load_artifacts()
-
-    latest_row = df.iloc[-1:].copy()
-    predictions = []
-
-    for i in range(HOURS_TO_FORECAST):
-
-        X_input = latest_row[FEATURES]
-
-        if model_type == "sklearn":
-            pred = model.predict(X_input)[0]
-
-        else:
-            X_scaled = scaler.transform(X_input)
-            pred = model.predict(X_scaled).flatten()[0]
-
-        predictions.append(pred)
-
-        # Update for next hour
-        next_row = latest_row.copy()
-        next_row["timestamp"] += timedelta(hours=1)
-        next_row["aqi_lag_1"] = pred
-        next_row["aqi"] = pred
-
-        latest_row = next_row
-
-    forecast_df = pd.DataFrame({
-        "datetime": pd.date_range(
-            start=df["timestamp"].iloc[-1] + timedelta(hours=1),
-            periods=HOURS_TO_FORECAST,
-            freq="H"
-        ),
-        "predicted_aqi": predictions
-    })
-
-    return forecast_df
+    print("\nPredicted AQI Class:", prediction)
 
 
 if __name__ == "__main__":
-    df_forecast = forecast()
-    print(df_forecast.head())
+    run_inference()
