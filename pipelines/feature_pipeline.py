@@ -2,7 +2,7 @@
 # -------- LIBRARIES --------
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import hopsworks
 import os
@@ -106,9 +106,9 @@ def run_pipeline():
         print("Last timestamp in feature group:", last_timestamp)
 
         # --- Convert to naive datetime (API expects UTC timestamp) ---
-        start_date = last_timestamp.to_pydatetime()
+        start_date = last_timestamp.to_pydatetime().replace(tzinfo=timezone.utc)
 
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
 
     print("Fetching data from:", start_date, "to", end_date)
 
