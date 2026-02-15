@@ -1,8 +1,5 @@
-# ================================
-# AQI FEATURE PIPELINE SCRIPT
-# ================================
 
-# -------- IMPORT LIBRARIES --------
+# -------- LIBRARIES --------
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -89,23 +86,33 @@ def compute_features(df):
 
 # -------- MAIN PIPELINE --------
 def run_pipeline():
-
     project = hopsworks.login()
     fs = project.get_feature_store()
-
     aqi_fg = fs.get_feature_group(
         name="aqi_features",
         version=1
     )
 
-    #  Read last 6 rows from feature store
+    # --- Reading existing feature group ---
     history_df = aqi_fg.read()
-    history_df = history_df.sort_values("timestamp").tail(6)
 
-    #  Fetch last 1 hour raw data
+    if history_df.empty:
+        print("Feature group empty. Fetching last 24 hours.")
+        start_date = datetime.utcnow() - timedelta(hours=24)
+    else:
+        history_df = history_df.sort_values("timestamp")
+        last_timestamp = history_df["timestamp"].max()
+
+        print("Last timestamp in feature group:", last_timestamp)
+
+        # --- Convert to naive datetime (API expects UTC timestamp) ---
+        start_date = last_timestamp.to_pydatetime()
+
     end_date = datetime.utcnow()
-    start_date = end_date - timedelta(hours=1)
 
+    print("Fetching data from:", start_date, "to", end_date)
+
+    # ---- Fetching raw data ----
     df_raw = fetch_air_pollution_history(
         LAT,
         LON,
@@ -115,31 +122,37 @@ def run_pipeline():
     )
 
     if df_raw.empty:
-        print("No raw data fetched.")
+        print("No new raw data fetched.")
         return
 
-    #  Merge history + new data
-    combined = pd.concat([history_df, df_raw], ignore_index=True)
+    # ---- Merging only necessary columns ----
+    combined = pd.concat([history_df.tail(6), df_raw], ignore_index=True)
 
-    # Keep only necessary columns for recompute
     combined = combined[[
         "timestamp","pm25","pm10","co","no2","o3","so2","nh3","aqi"
     ]]
 
-    #  Recompute features
+    # ---- Recomputing features ----
     combined_features = compute_features(combined)
 
-    #  Keep only newest row
     latest_row = combined_features.tail(1)
 
     if latest_row.empty:
-        print("No new features to insert.")
+        print("No new features generated.")
         return
 
-    aqi_fg.insert(latest_row)
-    print("Inserted 1 new row into Feature Group.")
+    print("Inserting row with timestamp:", latest_row["timestamp"].values)
 
+    # ---- Insert into Hopsworks Feature Group ----
+    try:
+        aqi_fg.insert(latest_row)
+        print("Inserted 1 new row into Feature Group.")
+    except Exception as e:
+        print("Insert failed:", e)
+      
 
 # -------- ENTRY POINT --------
 if __name__ == "__main__":
     run_pipeline()
+
+

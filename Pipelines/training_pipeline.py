@@ -1,13 +1,10 @@
-# ================================
-# AQI TRAINING PIPELINE
-# ================================
 
+# ------- IMPORT ALL LIBRARIES ---------
 import hopsworks
 import pandas as pd
 import joblib
 import os
 import numpy as np
-
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 from sklearn.preprocessing import StandardScaler
@@ -17,26 +14,19 @@ from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 from sklearn.utils.class_weight import compute_class_weight
 
-
-# -----------------------------
-#  Load Feature Store Data
-# -----------------------------
+# ------ LOGIN & GET FEATURE GROUP ---------
 project = hopsworks.login()
 fs = project.get_feature_store()
-
 fg = fs.get_feature_group(
     name="aqi_features",
     version=1
 )
-
 df = fg.read()
 
-# Sort by timestamp (CRITICAL for time series)
+# ----- Sort by timestamp (CRITICAL for time series) ----
 df = df.sort_values("timestamp")
 
-# -----------------------------
-#  Define Features & Target
-# -----------------------------
+# ----- DEFINE FEATURES AND TARGET -----
 le = LabelEncoder()
 df["aqi"] = le.fit_transform(df["aqi"])
 
@@ -53,31 +43,24 @@ features = [
 X = df[features]
 y = df[target]
 
-# -----------------------------
-#  Time-Based Train/Test Split
-# -----------------------------
+#  ---- Time-Based Train/Test Split ----
 split_index = int(len(df) * 0.8)
 
 X_train = X.iloc[:split_index]
 X_test = X.iloc[split_index:]
-
 y_train = y.iloc[:split_index]
 y_test = y.iloc[split_index:]
 
-# -----------------------------
-#  Scaling (for Logistic Regression)
-# -----------------------------
+
+#  ------ SCALING (FOR LOGISTIC REGRESSION) -----
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# -----------------------------
-#  Train Models (Balanced)
-# -----------------------------
-
+#  ------ TRAIN MODELS (BALANCED) ------
 models = {}
 
-# Logistic Regression (Balanced)
+# ---- Logistic Regression (Balanced) ----
 lr = LogisticRegression(
     max_iter=1000,
     class_weight="balanced",
@@ -86,7 +69,7 @@ lr = LogisticRegression(
 lr.fit(X_train_scaled, y_train)
 models["logistic_regression"] = (lr, X_test_scaled)
 
-# Random Forest (Balanced)
+# ---- Random Forest (Balanced) ----
 rf = RandomForestClassifier(
     n_estimators=300,
     random_state=42,
@@ -96,7 +79,7 @@ rf.fit(X_train, y_train)
 models["random_forest"] = (rf, X_test)
 
 
-# XGBoost (Manual Class Weights Handling)
+# ---- XGBoost (Manual Class Weights Handling) ----
 
 # Calculate class weights manually
 classes = np.unique(y_train)
@@ -123,23 +106,19 @@ xgb.fit(X_train, y_train, sample_weight=sample_weights)
 models["xgboost"] = (xgb, X_test)
 
 
-# -----------------------------
-#  Evaluate Models
-# -----------------------------
-
+#  ------- EVALUATE MODELS -------
 results = {}
 
 for name, (model, X_eval) in models.items():
     y_pred = model.predict(X_eval)
-
     acc = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred, average="macro")
-
     results[name] = {
         "accuracy": acc,
         "f1_score": f1
     }
 
+    # ---- Classification Report ----
     print(f"\n{name} Classification Report:")
     print(classification_report(y_test, y_pred))
 
@@ -147,28 +126,19 @@ print("Model Performance:")
 for name, metrics in results.items():
     print(name, metrics)
 
-# -----------------------------
-#  Register Models
-# -----------------------------
-
+# ------- REGISTER ALL MODELS IN HOPSWORKS -------
 mr = project.get_model_registry()
-
 best_model_name = max(results, key=lambda x: results[x]["f1_score"])
 print(f"\nBest Model: {best_model_name}")
 
 for name, (model, _) in models.items():
-
    base_model_dir = "models"
     os.makedirs(base_model_dir, exist_ok=True)
-
     model_dir = os.path.join(base_model_dir, f"{name}_model")
     os.makedirs(model_dir, exist_ok=True)
-
     joblib.dump(model, os.path.join(model_dir, "model.pkl"))
-
     if name == "logistic_regression":
         joblib.dump(scaler, os.path.join(model_dir, "scaler.pkl"))
-
 
     model_registry = mr.python.create_model(
         name=f"aqi_{name}",
@@ -177,3 +147,4 @@ for name, (model, _) in models.items():
     )
 
     model_registry.save(model_dir)
+

@@ -1,15 +1,16 @@
 name: AQI CI CD Pipeline
 
 on:
-
   schedule:
-    # Every hour at minute 5 (safer than minute 0)
-    - cron: '5 * * * *'
-
+    - cron: '5 * * * *'      # feature pipeline run hourly 
+    - cron: '0 19 * * *'      # training pipeline run at 12:00 AM PKT 
   workflow_dispatch:
 
 jobs:
-  aqi-pipeline:
+
+  # ---------------- FEATURE PIPELINE (HOURLY) ----------------
+  feature-pipeline:
+    if: github.event.schedule == '5 * * * *'
     runs-on: ubuntu-latest
 
     steps:
@@ -26,36 +27,34 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    # --------------------------------
-    # STEP 1: Feature Pipeline (Hourly)
-    # --------------------------------
     - name: Run Feature Pipeline
       env:
         OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |
-        set -e
         python pipelines/feature_pipeline.py
 
-    # --------------------------------
-    # STEP 2: Check If Midnight UTC
-    # --------------------------------
-    - name: Check Time
-      id: timecheck
-      run: |
-        HOUR=$(date -u +"%H")
-        echo "UTC Hour: $HOUR"
-        if [ "$HOUR" = "00" ]; then
-          echo "run_daily=true" >> $GITHUB_OUTPUT
-        else
-          echo "run_daily=false" >> $GITHUB_OUTPUT
-        fi
 
-    # --------------------------------
-    # STEP 3: Training (Daily)
-    # --------------------------------
+  # ---------------- TRAINING PIPELINE (DAILY) ----------------
+  training-pipeline:
+    if: github.event.schedule == '0 19 * * *'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
     - name: Run Training Pipeline
-      if: steps.timecheck.outputs.run_daily == 'true'
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
       run: |
