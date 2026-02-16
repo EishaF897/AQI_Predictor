@@ -5,4 +5,4 @@ numpy
 scikit-learn
 xgboost
 joblib
-hopsworks
+hopsworks[python]
