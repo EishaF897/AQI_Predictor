@@ -11,8 +11,14 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---------------- AUTO REFRESH (1 hour) ---------------- #
 st.markdown(
-    "<h1 style='text-align: center;'>🌍 3-Day AQI Forecast Dashboard</h1>",
+    "<meta http-equiv='refresh' content='3600'>",
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    "<h1 style='text-align: center;'> 3-Day AQI Forecast Dashboard</h1>",
     unsafe_allow_html=True
 )
 
@@ -76,7 +82,7 @@ aqi_messages = {
 df["AQI Category"] = df["predicted_aqi_class"].map(aqi_labels)
 
 # ---------------- CURRENT AQI (CLOSEST TO NOW) ---------------- #
-st.markdown("## 📊 Current Status")
+st.markdown("## Current Status")
 
 now = pd.Timestamp.utcnow()
 
@@ -118,10 +124,15 @@ with col2:
         latest["timestamp"].strftime("%A, %d %B %Y | %I:%M %p")
     )
 
+confidence = round(float(latest["confidence"]), 2)
+
+st.metric("Prediction Confidence", f"{confidence}%")
+
+
 st.markdown("---")
 
 # ---------------- HOURLY CHART ---------------- #
-st.markdown("## 📈 Hourly AQI Forecast")
+st.markdown("## Hourly AQI Forecast")
 
 fig = px.area(
     df,
@@ -145,7 +156,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- NEXT 3 DAYS SUMMARY ---------------- #
-st.markdown("## 📅 Next 3 Days AQI Summary")
+st.markdown("## Next 3 Days AQI Summary")
 
 df["date"] = df["timestamp"].dt.date
 today = datetime.today().date()
@@ -193,7 +204,7 @@ for _, row in daily.iterrows():
 st.markdown("---")
 
 # ---------------- HEALTH ADVISORY ---------------- #
-st.markdown("## 🚨 Health Advisory")
+st.markdown("## Health Advisory")
 
 current_info = aqi_messages[current_value]
 
@@ -210,7 +221,7 @@ st.markdown(
             {current_info['message']}
         </h3>
         <p style="font-size:18px;">
-            👉 {current_info['advice']}
+             {current_info['advice']}
         </p>
     </div>
     """,
