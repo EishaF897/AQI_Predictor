@@ -132,7 +132,7 @@ best_model_name = max(results, key=lambda x: results[x]["f1_score"])
 print(f"\nBest Model: {best_model_name}")
 
 for name, (model, _) in models.items():
-   base_model_dir = "models"
+    base_model_dir = "models"
     os.makedirs(base_model_dir, exist_ok=True)
     model_dir = os.path.join(base_model_dir, f"{name}_model")
     os.makedirs(model_dir, exist_ok=True)
