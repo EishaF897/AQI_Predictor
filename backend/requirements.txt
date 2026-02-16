@@ -5,4 +5,5 @@ numpy
 scikit-learn
 xgboost
 joblib
-hopsworks[python]
+hopsworks[python]==4.2.10
+
