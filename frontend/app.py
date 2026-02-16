@@ -11,7 +11,10 @@ st.set_page_config(
     layout="wide"
 )
 
-st.markdown("<h1 style='text-align: center;'>🌍 3-Day AQI Forecast Dashboard</h1>", unsafe_allow_html=True)
+st.markdown(
+    "<h1 style='text-align: center;'>🌍 3-Day AQI Forecast Dashboard</h1>",
+    unsafe_allow_html=True
+)
 
 API_URL = "https://aqipredictor-production.up.railway.app/predict"
 
@@ -39,11 +42,11 @@ aqi_labels = {
 }
 
 colors = {
-    1: "#2ECC71",     # Green
-    2: "#F1C40F",     # Yellow
-    3: "#E67E22",     # Orange
-    4: "#E74C3C",     # Red
-    5: "#8E44AD"      # Purple
+    1: "#2ECC71",
+    2: "#F1C40F",
+    3: "#E67E22",
+    4: "#E74C3C",
+    5: "#8E44AD"
 }
 
 # ---------------- AQI HEALTH MESSAGES ---------------- #
@@ -70,24 +73,20 @@ aqi_messages = {
     }
 }
 
-
 df["AQI Category"] = df["predicted_aqi_class"].map(aqi_labels)
 
-# ---------------- TOP KPI CARDS ---------------- #
+# ---------------- CURRENT AQI (CLOSEST TO NOW) ---------------- #
 st.markdown("## 📊 Current Status")
 
-latest = df.iloc[0]
+now = datetime.now()
+closest_row = df.iloc[(df["timestamp"] - now).abs().argsort()[:1]]
+latest = closest_row.iloc[0]
+
 current_value = int(latest["predicted_aqi_class"])
 current_label = aqi_labels[current_value]
 current_color = colors[current_value]
 
 col1, col2 = st.columns(2)
-
-# with col1:
-#     st.metric(
-#         "Current AQI Level",
-#         f"{current_value} - {current_label}"
-#     )
 
 with col1:
     st.markdown(
@@ -108,11 +107,14 @@ with col1:
     )
 
 with col2:
-    st.metric("Date & Time", latest["timestamp"].strftime("%A, %d %B %Y | %I:%M %p"))
+    st.metric(
+        "Date & Time",
+        latest["timestamp"].strftime("%A, %d %B %Y | %I:%M %p")
+    )
 
 st.markdown("---")
 
-# ---------------- AREA CHART ---------------- #
+# ---------------- HOURLY CHART ---------------- #
 st.markdown("## 📈 Hourly AQI Forecast")
 
 fig = px.area(
@@ -131,21 +133,26 @@ fig.update_layout(
     xaxis_title="Date & Time",
     yaxis_title="AQI Category",
     showlegend=False,
-    template="plotly_white"
+    template="plotly_dark"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- DAILY SUMMARY ---------------- #
-st.markdown("## 📅 3-Day AQI Summary")
+# ---------------- NEXT 3 DAYS SUMMARY ---------------- #
+st.markdown("## 📅 Next 3 Days AQI Summary")
 
 df["date"] = df["timestamp"].dt.date
+today = datetime.today().date()
+
+# Exclude today
+future_df = df[df["date"] > today]
 
 daily = (
-    df.groupby("date")["predicted_aqi_class"]
+    future_df.groupby("date")["predicted_aqi_class"]
     .mean()
     .round()
     .reset_index()
+    .sort_values("date")
     .head(3)
 )
 
@@ -153,8 +160,6 @@ for _, row in daily.iterrows():
     aqi_value = int(row["predicted_aqi_class"])
     label = aqi_labels[aqi_value]
     color = colors[aqi_value]
-
-    is_today = row["date"] == datetime.today().date()
 
     st.markdown(
         f"""
@@ -165,14 +170,14 @@ for _, row in daily.iterrows():
             padding:20px;
             border-left:10px solid {color};
             background-color:#1f2937;
-            margin-bottom:10px;
+            margin-bottom:12px;
             border-radius:12px;
         ">
             <div style="font-size:20px; font-weight:600;">
                 {row['date'].strftime('%A, %d %B %Y')}
             </div>
             <div style="font-size:26px; font-weight:bold; color:{color};">
-                {label}
+                {aqi_value} - {label}
             </div>
         </div>
         """,
