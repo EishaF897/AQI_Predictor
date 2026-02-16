@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 
 st.title("🌍 Real-Time 3 Day AQI Dashboard")
 
-API_URL = "https://aqipredictor-production.up.railway.app/"
+API_URL = "https://aqipredictor-production.up.railway.app/predict"
 
 # ---------------- LOADER ---------------- #
 with st.spinner("Fetching AQI Forecast..."):
