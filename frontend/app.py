@@ -231,24 +231,11 @@ st.markdown(
 st.caption("AQI Categories: 1=Good | 2=Moderate | 3=Poor | 4=Very Poor | 5=Hazardous")
 
 
-st.markdown("<br><br>---")
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("---")
 st.markdown(
     """
-    <style>
-    .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        text-align: center;
-        padding: 10px;
-        font-size: 14px;
-        color: gray;
-        background-color: transparent;
-    }
-    </style>
-
-    <div class="footer">
+    <div style='text-align: center; font-size: 14px; color: gray; margin-top:10px'>
         © 2026 Eisha Fatima | Islamabad AQI Prediction System <br>
         Built with Streamlit & Machine Learning
     </div>
