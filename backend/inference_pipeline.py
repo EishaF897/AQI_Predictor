@@ -78,8 +78,12 @@ def load_best_model(project):
 # ----------- PREDICTION -------------
 
 def get_predictions(lat, lon, api_key):
+    
     # ----- Login -----
-    project = hopsworks.login()
+    project = hopsworks.login(
+    api_key_value=os.getenv("HOPSWORKS_API_KEY")
+    )
+
     fs = project.get_feature_store()
     feature_view = fs.get_feature_view(
         name="aqi_feature_view",
