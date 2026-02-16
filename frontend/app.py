@@ -78,9 +78,15 @@ df["AQI Category"] = df["predicted_aqi_class"].map(aqi_labels)
 # ---------------- CURRENT AQI (CLOSEST TO NOW) ---------------- #
 st.markdown("## 📊 Current Status")
 
-now = datetime.now()
-closest_row = df.iloc[(df["timestamp"] - now).abs().argsort()[:1]]
-latest = closest_row.iloc[0]
+now = pd.Timestamp.utcnow()
+
+df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+future_rows = df[df["timestamp"] >= now]
+if not future_rows.empty:
+    latest = future_rows.iloc[0]
+else:
+    latest = df.iloc[-1]  
+
 
 current_value = int(latest["predicted_aqi_class"])
 current_label = aqi_labels[current_value]
