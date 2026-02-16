@@ -83,8 +83,29 @@ current_color = colors[current_value]
 
 col1, col2 = st.columns(2)
 
+# with col1:
+#     st.metric(
+#         "Current AQI Level",
+#         f"{current_value} - {current_label}"
+#     )
+
 with col1:
-    st.metric("Current AQI Level", f"{current_label}")
+    st.markdown(
+        f"""
+        <div style="
+            padding:20px;
+            border-radius:12px;
+            background-color:{current_color}20;
+            border-left:8px solid {current_color};
+        ">
+            <h4>Current AQI</h4>
+            <h2 style="color:{current_color};">
+                {current_value} - {current_label}
+            </h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 with col2:
     st.metric("Date & Time", latest["timestamp"].strftime("%A, %d %B %Y | %I:%M %p"))
@@ -143,10 +164,9 @@ for _, row in daily.iterrows():
             align-items:center;
             padding:20px;
             border-left:10px solid {color};
-            background-color:#f4f6f7;
+            background-color:#1f2937;
             margin-bottom:10px;
             border-radius:12px;
-            {'border:2px solid black;' if is_today else ''}
         ">
             <div style="font-size:20px; font-weight:600;">
                 {row['date'].strftime('%A, %d %B %Y')}
